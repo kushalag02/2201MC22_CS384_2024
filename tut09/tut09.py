@@ -1,114 +1,103 @@
-#Imports
-
 import pandas as pd
-from openpyxl import Workbook
-from openpyxl.styles import PatternFill, Border, Side
+from datetime import datetime
+import openpyxl
+from openpyxl.styles import PatternFill
 
-# Load files
-
-with open('./stud_list.txt', 'r') as f:
-    student_list = [line.strip() for line in f]
-
-with open('./dates.txt', 'r') as f:
-    lecture_dates = [line.strip() for line in f]
-
-attendance_data = pd.read_csv('/content/input_attendance.csv')
-
-#Valid Date, Roll Number and Name Extraction from CSV
-
-student_dict = {}
-attendance_dict = {date: {} for date in lecture_dates}
-
-valid_start = pd.to_datetime('18:00:00').time()
-valid_end = pd.to_datetime('20:00:00').time()
-
-def is_valid_time(time):
-    return (valid_start <= time <= valid_end)
-
-for index, row in attendance_data.iterrows():
-    timestamp_str = row['Timestamp']
-    roll_no_name = row['Roll']
-
-    if not isinstance(roll_no_name, str):
-        continue
-
-    timestamp = pd.to_datetime(timestamp_str, format='%d/%m/%Y %H:%M:%S')
-    roll_no, name = roll_no_name.split(' ', 1)
-
-    if roll_no not in student_dict:
-        student_dict[roll_no] = name
-
-    date = timestamp.strftime('%d/%m/%Y')
-    time = timestamp.time()
-
-    if date in lecture_dates and is_valid_time(time):
-        if roll_no not in attendance_dict[date]:
-            attendance_dict[date][roll_no] = 0
-        attendance_dict[date][roll_no] += 1
-
-#Excel Sheet Generation and Assigning Titles
-wb = Workbook()
-ws = wb.active
-ws.title = "Attendance Record"
-
-ws.append(["Roll Number", "Name"] + lecture_dates + ["Total Attendance Recorded", "Total Attendance Marked", "Total Attendance Allowed", "Proxy"])
-
-#Define Cell Colours
-
-green_fill = PatternFill(start_color="00FF00", end_color="00FF00", fill_type="solid")
-yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
-red_fill = PatternFill(start_color="FF0000", end_color="FF0000", fill_type="solid")
-white_fill = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
-
-# Define the border style
-thin_border = Border(left=Side(style='thin'),
-                     right=Side(style='thin'),
-                     top=Side(style='thin'),
-                     bottom=Side(style='thin'))
-
-current_row = 2
-
-# Excel Sheet Processing based on Dict Data of Students
-for roll_no, name in student_dict.items():
-    total_attendance_recorded = 0
-    total_attendance_marked = 0
-
-    ws.cell(row=current_row, column=1, value=roll_no)
-    ws.cell(row=current_row, column=2, value=name)
-
-    col_idx = 3
-    for date in lecture_dates:
-        attendance_count = attendance_dict[date].get(roll_no, 0)
-        total_attendance_recorded += attendance_count
-        ws.cell(row=current_row, column=col_idx, value=attendance_count)
-        # Color cells based on attendance count
-        if attendance_count == 2:
-            fill = green_fill
-            total_attendance_marked += 2
-        elif attendance_count == 1:
-            fill = yellow_fill
-            total_attendance_marked += 1
-        elif attendance_count == 0:
-            fill = white_fill
-        elif attendance_count > 2:
-            fill = red_fill  # Mark attendance count > 2 as invalid (Red)
-
-        cell = ws.cell(row=current_row, column=col_idx)
-        cell.fill = fill
-        cell.border = thin_border
-        col_idx += 1
-
-    total_attendance_allowed = 2 * len(lecture_dates)
-    proxy = abs(total_attendance_recorded - total_attendance_marked)
-
-    ws.cell(row=current_row, column=col_idx, value=total_attendance_recorded)
-    ws.cell(row=current_row, column=col_idx + 1, value=total_attendance_marked)
-    ws.cell(row=current_row, column=col_idx + 2, value=total_attendance_allowed)
-    ws.cell(row=current_row, column=col_idx + 3, value=proxy)
-
-    current_row += 1
-
-wb.save('./output_excel.xlsx')
+def split_roll_name(input_file, output_file): # to split the input file
+    df = pd.read_csv(input_file)
+    
+    # Split the 'Roll' column into 'Roll Number' and 'Name'
+    df[['Roll Number', 'Name']] = df['Roll'].str.split(' ', n=1, expand=True)
+    
+    # Drop the old 'Roll' column
+    df = df.drop(columns=['Roll'])
+    
+    df.to_csv(output_file, index=False)
 
 
+def load_student_list(file): # Accessing the file
+    students = {}
+    with open(file, 'r') as f:
+        for line in f:
+            roll, name = line.strip().split(' ', 1) 
+            students[roll] = name 
+    return students
 
+def load_dates(file): # Made changes according to the format of dates.txt
+    with open(file, 'r') as f:
+        dates = f.read().strip().split(', ')
+    return dates
+
+def process_attendance(file): 
+    attendance_data = pd.read_csv(file)
+    # Format '%d-%m-%Y %H:%M'
+    attendance_data['Timestamp'] = pd.to_datetime(attendance_data['Timestamp'], format='%d-%m-%Y %H:%M')
+    return attendance_data
+
+def get_attendance_status(attendance_data, dates, students): # Processing attendence data by iterating
+    attendance_summary = {roll: {date: 0 for date in dates} for roll in students.keys()}
+
+    for roll in students.keys(): 
+        for date in dates:
+            date_formatted = datetime.strptime(date, '%d/%m/%Y').strftime('%Y-%m-%d')
+            lecture_time_start = datetime.strptime(f"{date_formatted} 18:00", '%Y-%m-%d %H:%M')
+            lecture_time_end = datetime.strptime(f"{date_formatted} 20:00", '%Y-%m-%d %H:%M')
+
+            # Filter attendance for the student within the lecture time window
+            student_attendance = attendance_data[
+                (attendance_data['Roll Number'] == roll) &
+                (attendance_data['Timestamp'] >= lecture_time_start) &
+                (attendance_data['Timestamp'] <= lecture_time_end)
+            ]
+
+            # Assign attendance status
+            if len(student_attendance) >= 2:
+                attendance_summary[roll][date] = 2  # Full attendance
+            elif len(student_attendance) == 1:
+                attendance_summary[roll][date] = 1  # Partial attendance
+            else:
+                attendance_summary[roll][date] = 0  # Absent
+
+    return attendance_summary
+
+# Step 4: Generate Excel output with formatting
+def generate_excel(attendance_summary, students, dates, output_file):
+    # Create a DataFrame for the output with roll number and names as index
+    df = pd.DataFrame(attendance_summary).T
+    df.index = [f"{roll} {students[roll]}" for roll in df.index]  # Format index as 'Roll Number Name'
+    df.columns = dates
+
+    writer = pd.ExcelWriter(output_file, engine='openpyxl')
+    df.to_excel(writer, sheet_name='Attendance', index=True)
+
+    workbook = writer.book
+    worksheet = writer.sheets['Attendance']
+
+    # Define colors for highlighting
+    red_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
+    yellow_fill = PatternFill(start_color="FFEB84", end_color="FFEB84", fill_type="solid")
+    green_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
+
+    # Apply conditional formatting to each cell based on attendance status
+    for row in worksheet.iter_rows(min_row=2, min_col=2, max_row=len(df)+1, max_col=len(dates)+1):
+        for cell in row:
+            if cell.value == 0:
+                cell.fill = red_fill
+            elif cell.value == 1:
+                cell.fill = yellow_fill
+            elif cell.value == 2:
+                cell.fill = green_fill
+
+    writer.close()
+
+def main():
+    split_roll_name('input_attendance.csv','input_attendance_processed.csv')
+    students = load_student_list('stud_list.txt')  # Load roll numbers and names
+    dates = load_dates('dates.txt')  # Modified to handle comma-separated dates
+    attendance_data = process_attendance('input_attendance_processed.csv')
+
+    attendance_summary = get_attendance_status(attendance_data, dates, students)
+    generate_excel(attendance_summary, students, dates, 'output_excel.xlsx')
+
+if __name__ == "__main__":
+    main()
