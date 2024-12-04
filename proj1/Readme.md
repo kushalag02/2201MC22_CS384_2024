@@ -12,6 +12,7 @@ This project automates the generation of seating plans and attendance sheets for
 
 2. _Attendance Sheet Generation_:
    - Creates a directory containing Excel files for attendance sheets.
+   - Room-wise attendence sheets where students will mark their attendence.
    - Each sheet includes:
      - Roll numbers
      - Student names
@@ -34,5 +35,7 @@ This project automates the generation of seating plans and attendance sheets for
 3. Run the following command to start the frontend
 
 ```bash
-   streamlit run input.py
+   streamlit run frontend_input.py
 ```
+
+4. The seating_arrangement_final.csv will be ready and also the attendence sheets are generated in the same folder.
