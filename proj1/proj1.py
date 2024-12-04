@@ -14,9 +14,6 @@ def index():
 
 
 def generate_pdf_for_attendance(date, day, shift, room, students, output_dir):
-
-    print(students)
-    print("\nhola")
     safe_date = date.replace("/", "_")
     day_dir = os.path.join(output_dir, safe_date)
     if not os.path.exists(day_dir):
@@ -31,39 +28,56 @@ def generate_pdf_for_attendance(date, day, shift, room, students, output_dir):
     c = canvas.Canvas(pdf_filename, pagesize=letter)
     width, height = letter
 
+    # Header
     c.setFont("Helvetica-Bold", 14)
     c.drawString(30, height - 40, f"Attendance Sheet - {day} ({shift})")
-    c.drawString(30, height - 60, f"Room No.: {room}")
+    c.drawString(30, height - 60, f"Date: {date}")
+    c.drawString(30, height - 80, f"Room No.: {room}")
 
+    # Table Header
     c.setFont("Helvetica-Bold", 10)
-    c.drawString(30, height - 100, "Student Name")
-    c.drawString(200, height - 100, "Roll No.")
-    c.drawString(350, height - 100, "Signature of Student")
+    c.drawString(30, height - 120, "Student Data:")
 
-    y_position = height - 120
-
+    # Student Data in Box Format
+    y_position = height - 140
+    box_width = 500
+    box_height = 40
     for student in students:
         student_name = student['name'] if pd.notna(student['name']) else ""
         student_roll = student['rollno'] if pd.notna(student['rollno']) else ""
 
+        # Draw box
+        c.setStrokeColor(colors.black)
+        c.setLineWidth(1)
+        c.rect(30, y_position - box_height, box_width, box_height)
+
+        # Add text inside box
         c.setFont("Helvetica", 10)
-        c.drawString(30, y_position, student_name)
+        c.drawString(40, y_position - 20, f"Name: {student_name}")
+        c.drawString(200, y_position - 20, f"Roll No.: {student_roll}")
+        c.drawString(350, y_position - 20, "Signature: _______________")
 
-        c.drawString(200, y_position, student_roll)
-
-        c.drawString(350, y_position, "____________________")
-
-        y_position -= 20
-
+        y_position -= box_height + 10
         if y_position < 100:
             c.showPage()
             y_position = height - 40
 
+    # TA and Invigilator's Signatures Section
+    y_position -= 40
     c.setFont("Helvetica-Bold", 10)
-    c.drawString(30, y_position - 30,
-                 "Invigilator's Signature: ____________________")
+    c.drawString(30, y_position, "TA's Signatures:")
+    y_position -= 20
+    for i in range(1, 5): 
+        c.drawString(30, y_position, f"TA {i}: ____________________")
+        y_position -= 20
+
+    # Professor's Signature
+    y_position -= 20
+    c.drawString(30, y_position, "Invigilator's Signature: ____________________")
 
     c.save()
+
+
 
 
 @app.route('/submit', methods=['POST'])
